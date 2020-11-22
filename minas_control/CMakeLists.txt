@@ -26,7 +26,8 @@ include_directories(
 add_library(minas_client src/minas_client.cpp)
 
 ## Declare a C++ executable for ROS_CONTROL
-add_executable(main src/main.cpp src/minas_hardware_interface.cpp)
+add_executable(minas_main src/main.cpp src/minas_hardware_interface.cpp)
+set_target_properties(minas_main PROPERTIES OUTPUT_NAME main)
 
 ## Declare a C++ executable
 add_executable(slaveinfo src/slaveinfo.cpp)
@@ -34,7 +35,7 @@ add_executable(simple_test src/simple_test.cpp)
 add_executable(reset src/reset.cpp)
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(main ${catkin_LIBRARIES} minas_client)
+target_link_libraries(minas_main ${catkin_LIBRARIES} minas_client)
 target_link_libraries(slaveinfo ${catkin_LIBRARIES})
 target_link_libraries(simple_test ${catkin_LIBRARIES} minas_client)
 target_link_libraries(reset ${catkin_LIBRARIES} minas_client)
@@ -44,10 +45,10 @@ function(set_sudo_binary tgt)
   string(ASCII 27 ESCAPE)
   add_custom_target(sudo_${tgt}
     COMMAND sudo -n sh -c 'setcap cap_net_raw,cap_ipc_lock=+ep ${loc}' || (>&2 echo "${ESCAPE}[31m#\ type\ following\ command\ before\ execute\ reset...\ sudo\ setcap cap_net_raw,cap_ipc_lock=+ep\ ${loc}${ESCAPE}[0m")
-    DEPENDS bin/${tgt})
+    DEPENDS ${tgt})
   add_custom_target(sudo_${tgt}_all ALL DEPENDS sudo_${tgt})
 endfunction()
-set_sudo_binary(main)
+set_sudo_binary(minas_main)
 set_sudo_binary(slaveinfo)
 set_sudo_binary(simple_test)
 set_sudo_binary(reset)
@@ -57,7 +58,7 @@ set_sudo_binary(reset)
 #############
 
 ## Mark executables and/or libraries for installation
-install(TARGETS slaveinfo simple_test reset minas_client main
+install(TARGETS slaveinfo simple_test reset minas_client minas_main
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
@@ -67,7 +68,7 @@ set_property(TARGET slaveinfo PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 set_property(TARGET simple_test PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 set_property(TARGET reset PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 set_property(TARGET minas_client PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
-set_property(TARGET main PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
+set_property(TARGET minas_main PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 install(DIRECTORY include/${PROJECT_NAME}/
   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
