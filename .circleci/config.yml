@@ -1,0 +1,169 @@
+version: 2.1
+
+commands:
+  setup:
+    steps:
+      - checkout
+      - run:
+          name: Setup ROS catkin workspace
+          command : |-
+            apt update
+            echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
+            apt install -y -q lsb-release apt wget gnupg
+            sh -c "echo \"deb $ROS_REPOSITORY_PATH `lsb_release -cs` main\" > /etc/apt/sources.list.d/ros-latest.list"
+            wget http://packages.ros.org/ros.key -O - | apt-key add -
+            apt-get update
+            apt-get install -y -q python-catkin-pkg python-rosdep ros-${ROS_DISTRO}-catkin
+            rosdep init && rosdep update --include-eol-distros
+            mkdir -p ~/catkin_ws/src
+            cd ~/catkin_ws/src && ln -sf ~/project ${CIRCLE_PROJECT_REPONAME}
+      - run:
+          name: Run rosdep install
+          command : |-
+            . /opt/ros/${ROS_DISTRO}/setup.bash && cd ~/catkin_ws && rosdep install --from-paths src/ --ignore-src -y
+  build:
+    steps:
+      - run:
+          name: Build packages
+          # need to disable sudo not to run setcap on 'main' executable
+          command : |-
+            SUDO_FORCE_REMOVE=yes dpkg -r --force-depends sudo
+            . /opt/ros/${ROS_DISTRO}/setup.bash && cd ~/catkin_ws && catkin_make
+  test:
+    steps:
+      - run:
+          name: Test packages
+          command : |-
+            . /opt/ros/${ROS_DISTRO}/setup.bash && cd ~/catkin_ws && catkin_make run_tests
+            . /opt/ros/${ROS_DISTRO}/setup.bash && cd ~/catkin_ws && catkin_test_results --verbose build
+  build_doc:
+    steps:
+      - run:
+          name: Doc build
+          command : |-
+            apt-get install -y -q python-sphinx doxygen pandoc python-catkin-sphinx
+            apt-get install -y -q texlive-latex-base texlive-latex-recommended texlive-fonts-recommended texlive-latex-extra
+            . /opt/ros/${ROS_DISTRO}/setup.bash && cd ~/catkin_ws && catkin_make --pkg minas_control --make-args docbuild_minas_control
+            mkdir ~/artifacts && cp ~/catkin_ws/src/minas/minas_control/output/minas_control-*.pdf ~/artifacts/
+  build_deb:
+    steps:
+      - run:
+          name: Deb build
+          command : |-
+            apt-get install -y -q python-bloom build-essential debhelper sudo # sudo required for debbuild
+            echo "yaml file:///etc/ros/rosdep/minas.yaml" >> /etc/ros/rosdep/sources.list.d/20-default.list
+            echo "" > /etc/ros/rosdep/minas.yaml
+            echo "ethercat_manager:"                     >> /etc/ros/rosdep/minas.yaml
+            echo "  ubuntu:"                             >> /etc/ros/rosdep/minas.yaml
+            echo "    apt: ros-melodic-ethercat-manager"  >> /etc/ros/rosdep/minas.yaml
+            echo "minas_control:"                        >> /etc/ros/rosdep/minas.yaml
+            echo "  ubuntu:"                             >> /etc/ros/rosdep/minas.yaml
+            echo "    apt: ros-melodic-minas-control"     >> /etc/ros/rosdep/minas.yaml
+            echo "tra1_description:"                     >> /etc/ros/rosdep/minas.yaml
+            echo "  ubuntu:"                             >> /etc/ros/rosdep/minas.yaml
+            echo "    apt: ros-melodic-tra1-description"  >> /etc/ros/rosdep/minas.yaml
+            echo "tra1_moveit_config:"                   >> /etc/ros/rosdep/minas.yaml
+            echo "  ubuntu:"                             >> /etc/ros/rosdep/minas.yaml
+            echo "    apt: ros-melodic-tra1-moveit-config" >> /etc/ros/rosdep/minas.yaml
+            echo "tra1_bringup:"                         >> /etc/ros/rosdep/minas.yaml
+            echo "  ubuntu:"                             >> /etc/ros/rosdep/minas.yaml
+            echo "    apt: ros-melodic-tra1-bringup"      >> /etc/ros/rosdep/minas.yaml
+            rosdep update
+            . /opt/ros/${ROS_DISTRO}/setup.bash && cd ~/catkin_ws && set -x; for package in ethercat_manager minas_control tra1_description tra1_moveit_config tra1_bringup; do
+                catkin_make --pkg ${package} --make-args debbuild_${package};
+                package=$(echo $package | tr '_' '-');
+                dpkg -i src/minas/ros-melodic-${package}_*.deb || (rm /var/lib/dpkg/info/ros-melodic-${package}.postinst ; dpkg --configure ros-melodic-${package});
+            done
+            mkdir ~/artifacts && cp ~/catkin_ws/src/minas/*.deb ~/artifacts/
+
+jobs:
+  build_kinetic:
+    docker:
+      - image: ubuntu:xenial
+    environment:
+      - ROS_DISTRO: kinetic
+      - ROS_REPOSITORY_PATH: http://packages.ros.org/ros/ubuntu
+    steps:
+      - setup
+      - build
+      - test
+  build_melodic:
+    docker:
+      - image: ubuntu:bionic
+    environment:
+      - ROS_DISTRO: melodic
+      - ROS_REPOSITORY_PATH: http://packages.ros.org/ros/ubuntu
+    steps:
+      - setup
+      - build
+      - test
+
+  build_doc:
+    docker:
+      - image: ubuntu:xenial
+    environment:
+      - ROS_DISTRO: kinetic
+      - ROS_REPOSITORY_PATH: http://packages.ros.org/ros/ubuntu
+    steps:
+      - setup
+      - build_doc
+      - persist_to_workspace:
+          root: /root
+          paths:
+            - artifacts
+      - store_artifacts:
+          path: /root/artifacts/
+
+  build_deb:
+    docker:
+      - image: ubuntu:bionic
+    environment:
+      - ROS_DISTRO: melodic
+      - ROS_REPOSITORY_PATH: http://packages.ros.org/ros/ubuntu
+    steps:
+      - setup
+      - build_deb
+      - persist_to_workspace:
+          root: /root
+          paths:
+            - artifacts
+      - store_artifacts:
+          path: /root/artifacts/
+
+  deploy:
+    machine: true
+    steps:
+      - attach_workspace:
+          at: ~/
+      - checkout
+      - run:
+          command: |-
+            export CIRCLE_ARTIFACTS=~/artifacts/
+            ./.github_release.sh
+      - store_artifacts:
+          path: /home/circleci/artifacts/
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - build_kinetic
+      - build_melodic
+      - build_doc:
+          filters:
+            tags:
+              only: /[0-9]+(\.[0-9]+)*/
+      - build_deb:
+          filters:
+            tags:
+              only: /[0-9]+(\.[0-9]+)*/
+      - deploy:
+          filters:
+            tags:
+              only: /[0-9]+(\.[0-9]+)*/
+            branches:
+              ignore: /.*/
+          requires:
+            - build_doc
+            - build_deb
+
