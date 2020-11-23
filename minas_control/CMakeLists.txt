@@ -95,9 +95,14 @@ endif()
 # debbuild
 # catkin build minas_control --make-args debbuild
 # ROS_PARALLEL_JOBS='' catkin_make --pkg minas_control -- debbuild
+find_program(LSB_RELEASE_EXEC lsb_release)
+execute_process(COMMAND ${LSB_RELEASE_EXEC} -cs
+    OUTPUT_VARIABLE LSB_RELEASE_ID_SHORT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
 add_custom_target(debbuild_${PROJECT_NAME}
   COMMAND sudo -n true || (>&2 echo "debbuild need sudo access to make debs" && exit 1)
-  COMMAND bloom-generate rosdebian --os-name ubuntu --os-version trusty --ros-distro indigo
+  COMMAND bloom-generate rosdebian --os-name ubuntu --os-version ${LSB_RELEASE_ID_SHORT} --ros-distro $ENV{ROS_DISTRO}
   COMMAND MAKEFLAGS= fakeroot debian/rules binary
   COMMAND find debian obj-x86_64-linux-gnu -type f -not -name postinst -print0 | xargs -0 rm --
   COMMAND find debian obj-x86_64-linux-gnu -type d -empty -delete
