@@ -29,6 +29,22 @@ commands:
           command : |-
             SUDO_FORCE_REMOVE=yes dpkg -r --force-depends sudo
             . /opt/ros/${ROS_DISTRO}/setup.bash && cd ~/catkin_ws && catkin_make
+  build_isolated:
+    steps:
+      - run:
+          name: Build packages
+          # need to disable sudo not to run setcap on 'main' executable
+          command : |-
+            SUDO_FORCE_REMOVE=yes dpkg -r --force-depends sudo
+            . /opt/ros/${ROS_DISTRO}/setup.bash && cd ~/catkin_ws && catkin_make_isolated
+  build_isolated_install:
+    steps:
+      - run:
+          name: Build packages
+          # need to disable sudo not to run setcap on 'main' executable
+          command : |-
+            SUDO_FORCE_REMOVE=yes dpkg -r --force-depends sudo
+            . /opt/ros/${ROS_DISTRO}/setup.bash && cd ~/catkin_ws && catkin_make_isolated --install
   test:
     steps:
       - run:
@@ -97,6 +113,24 @@ jobs:
       - setup
       - build
       - test
+  build_melodic_isolated:
+    docker:
+      - image: ubuntu:bionic
+    environment:
+      - ROS_DISTRO: melodic
+      - ROS_REPOSITORY_PATH: http://packages.ros.org/ros/ubuntu
+    steps:
+      - setup
+      - build_isolated
+  build_melodic_isolated_install:
+    docker:
+      - image: ubuntu:bionic
+    environment:
+      - ROS_DISTRO: melodic
+      - ROS_REPOSITORY_PATH: http://packages.ros.org/ros/ubuntu
+    steps:
+      - setup
+      - build_isolated_install
 
   build_doc:
     docker:
